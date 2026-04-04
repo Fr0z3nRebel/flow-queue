@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flow Queue</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="hero">
+        <div class="hero-brand">
+          <img
+            class="hero-logo"
+            src="../icons/flow-queue.svg"
+            width="44"
+            height="44"
+            alt=""
+            decoding="async"
+          />
+          <div class="hero-titles">
+            <p class="eyebrow">Lefty Studios</p>
+            <h1>Flow Queue</h1>
+          </div>
+          <button
+            type="button"
+            class="hero-help"
+            id="helpOpen"
+            aria-label="How to use Flow Queue"
+            aria-haspopup="dialog"
+            aria-controls="helpDialog"
+          >
+            <svg class="hero-help__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpDialogTitle">
+        <div class="help-dialog__inner">
+          <h2 id="helpDialogTitle" class="help-dialog__title">How to use Flow Queue</h2>
+          <div class="help-dialog__copy">
+            <p class="lede">
+              1. Open a <strong>Google Flow project</strong>.
+              <br />(The URL should look like <span class="path">labs.google/fx/tools/flow/project/…</span>)
+            </p>
+            <p class="lede">
+              2. Add your prompts to the prompt queue-<strong>one per line</strong>—then click
+              <strong>Run queue</strong>.
+            </p>
+          </div>
+          <section class="help-dialog__advanced" aria-labelledby="helpTimingHeading">
+            <h3 id="helpTimingHeading" class="help-dialog__advanced-label">Optional · timing</h3>
+            <p class="help-dialog__advanced-body">
+              Minimum and maximum pause (seconds) set how long Flow Queue waits between prompts. We
+              pick a <strong>random</strong> wait inside that range each time. Adjust only if you want
+              longer or shorter gaps; the defaults are fine for most uses.
+            </p>
+          </section>
+          <button type="button" class="btn btn-primary help-dialog__close" id="helpClose">
+            Got it
+          </button>
+        </div>
+      </dialog>
+
+      <div class="field">
+        <label for="prompts" class="field-label">Prompt queue</label>
+        <span class="field-hint">One prompt per line · runs in order</span>
+        <textarea
+          id="prompts"
+          rows="11"
+          spellcheck="true"
+          placeholder="A red bicycle on a rainy street&#10;A watercolor fox in a forest&#10;Neon alley at dusk, cinematic"
+        ></textarea>
+      </div>
+
+      <div class="timing">
+        <div class="field-inline">
+          <label for="waitMin">Min wait</label>
+          <div class="input-wrap">
+            <input type="number" id="waitMin" min="0" step="1" value="10" />
+            <span class="suffix">sec</span>
+          </div>
+        </div>
+        <div class="field-inline">
+          <label for="waitMax">Max wait</label>
+          <div class="input-wrap">
+            <input type="number" id="waitMax" min="0" step="1" value="30" />
+            <span class="suffix">sec</span>
+          </div>
+        </div>
+      </div>
+
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+
+      <div class="actions">
+        <button type="button" id="ping" class="btn btn-ghost">Check page</button>
+        <button type="button" id="run" class="btn btn-primary">Run queue</button>
+        <button type="button" id="stop" class="btn btn-quiet">Stop</button>
+      </div>
+    </div>
+
+    <footer class="footer footer-float" aria-label="Support and legal">
+      <div class="footer-stack">
+        <a
+          id="bmc-link"
+          class="bmc-pill"
+          href="https://buymeacoffee.com/john.adams"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <svg
+            class="bmc-pill__icon"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              d="M18.5 3H6c-1.1 0-2 .9-2 2v5.71c0 3.83 2.95 7.18 6.78 7.29 3.96.12 7.22-3.06 7.22-7v-1h.5c1.38 0 2.5-1.12 2.5-2.5S19.88 3 18.5 3zM16 5v3H6V5h10zm2.5 3H18V5h.5c.28 0 .5.22.5.5s-.22.5-.5.5zM4 19h16v2H4v-2z"
+            />
+          </svg>
+          <span>Buy Me a Coffee</span>
+        </a>
+        <p class="footer-disclaimer">
+          Flow Queue is an independent extension and is not affiliated with,
+          endorsed by, or sponsored by Google. Google Flow and related marks
+          belong to Google LLC.
+        </p>
+        <p class="footer-meta">
+          <a
+            class="footer-link"
+            href="https://www.leftystudios.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy
+          </a>
+          <span class="footer-meta-sep" aria-hidden="true">·</span>
+          <span>
+            © 2026
+            <a
+              class="footer-link"
+              href="https://leftystudios.com"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Lefty Studios
+            </a>
+            LLC
+          </span>
+        </p>
+      </div>
+    </footer>
+    <script src="sidepanel.js" defer></script>
+  </body>
+</html>

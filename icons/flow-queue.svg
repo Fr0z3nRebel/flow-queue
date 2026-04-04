@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Flow Queue">
+  <defs>
+    <style>
+      .pill {
+        fill: #f3791b;
+      }
+      .chev {
+        stroke: #f3791b;
+        fill: none;
+        stroke-width: 8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+    </style>
+  </defs>
+  <rect class="pill" x="4" y="9" width="28" height="12" rx="6" />
+  <rect class="pill" x="4" y="26" width="24" height="12" rx="6" />
+  <rect class="pill" x="4" y="43" width="28" height="12" rx="6" />
+  <path class="chev" d="M 41 16 L 54 32 41 48" />
+</svg>
