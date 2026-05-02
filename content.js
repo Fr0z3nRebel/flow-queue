@@ -35,6 +35,41 @@
       .trim();
   }
 
+  function base64ToFile(dataUrl, filename = "reference.png") {
+    const arr = dataUrl.split(",");
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  }
+
+  async function pasteImageIntoEditor(el, file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const ev = new ClipboardEvent("paste", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clipboardData: dt
+    });
+    if (!ev.clipboardData) {
+      try {
+        Object.defineProperty(ev, "clipboardData", {
+          value: dt,
+          enumerable: true,
+          configurable: true,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    el.dispatchEvent(ev);
+  }
+
   function editorSeemsToContain(el, text) {
     const t = text.trim();
     if (!t) return false;
@@ -191,64 +226,171 @@
   /**
    * Slate/React ignores raw DOM writes — drive the same path as typing/pasting.
    */
-  async function injectTextIntoFlowPrompt(el, text, charDelayMs) {
-    if (!text) return false;
+  async function clickPlusButton() {
+    const selectors = globalThis.FLOW_BATCH_DEFAULT_SELECTORS.uploadButton || [];
+    let btn = firstMatch(selectors.filter(s => !s.includes(':contains')));
+    
+    if (!btn || !isVisible(btn)) {
+      btn = Array.from(document.querySelectorAll('button')).find(b => {
+         return isVisible(b) && (b.textContent || '').includes('add_2');
+      });
+    }
+
+    if (!btn || !isVisible(btn)) {
+      for (const b of document.querySelectorAll('button')) {
+        if (!isVisible(b)) continue;
+        const text = b.textContent.trim().toLowerCase();
+        if (text === 'add' || text === 'add_circle' || text === 'add_photo_alternate') {
+          btn = b;
+          break;
+        }
+      }
+    }
+    if (btn) {
+      log("Found '+' button, clicking it.");
+      btn.click();
+      return true;
+    }
+    return false;
+  }
+
+  async function clickExistingReference() {
+    const matches = Array.from(document.querySelectorAll('div, span, p')).filter(el => {
+      return isVisible(el) && el.textContent.trim() === 'reference.png';
+    });
+    
+    if (matches.length > 0) {
+      const target = matches[matches.length - 1];
+      const clickable = target.closest('button, [role="menuitem"], li, [role="button"]') || target;
+      clickable.click();
+      return true;
+    }
+    return false;
+  }
+
+  async function injectTextIntoFlowPrompt(el, text, charDelayMs, refImageFile = null, isFirstPrompt = false) {
+    if (!text && !refImageFile) return false;
 
     await focusEditorLikeUser(el);
     await clearEditorContent(el);
     await focusEditorLikeUser(el);
 
+    if (refImageFile) {
+      let attachedFromMenu = false;
+      
+      if (!isFirstPrompt) {
+        log("Attempting to attach from existing assets...");
+        if (await clickPlusButton()) {
+        let found = false;
+        for (let i = 0; i < 10; i++) {
+          await sleep(500);
+          if (await clickExistingReference()) {
+            found = true;
+            break;
+          }
+        }
+        
+        if (found) {
+          log("Attached existing reference.png from menu!");
+          attachedFromMenu = true;
+          await sleep(1500); // Wait for pill to render in prompt
+        } else {
+          log("Not found in menu. Closing menu and falling back to paste...");
+          await focusEditorLikeUser(el); // clicks editor to close menu
+          await sleep(500);
+        }
+      }
+      }
+
+      if (!attachedFromMenu) {
+        const selectors = globalThis.FLOW_BATCH_DEFAULT_SELECTORS;
+        const htmlBefore = el.innerHTML;
+        const imgsBefore = document.querySelectorAll('img').length;
+        
+        await pasteImageIntoEditor(el, refImageFile);
+        log("Waiting for image to appear in DOM...");
+        
+        let changed = false;
+        for(let i=0; i<60; i++) {
+          if (el.innerHTML !== htmlBefore || document.querySelectorAll('img').length > imgsBefore) {
+            changed = true;
+            break;
+          }
+          await sleep(500);
+        }
+
+        if (changed) {
+          log("Image detected in DOM, waiting for upload to settle...");
+          for(let i=0; i<60; i++) {
+             let visibleSpinner = false;
+             for (const s of document.querySelectorAll('[role="progressbar"]')) {
+               if (isVisible(s)) visibleSpinner = true;
+             }
+             const submitBtn = firstMatch(selectors.submitButton || []) || findCreateButtonByArrowIcon();
+             const isSubmitDisabled = submitBtn && (submitBtn.disabled || submitBtn.getAttribute('aria-disabled') === 'true');
+             
+             if (!visibleSpinner && !isSubmitDisabled && submitBtn) {
+                log("Upload appears complete (Submit button enabled).");
+                break;
+             }
+             if (!visibleSpinner && i > 16) { 
+                log("No spinner found after 8s, assuming upload complete.");
+                break;
+             }
+             await sleep(500);
+          }
+          await sleep(2500); // Final safety buffer
+        } else {
+          log("Warning: Image paste not detected in DOM after 30s.");
+        }
+      } // End if (!attachedFromMenu)
+      
+      await focusEditorLikeUser(el);
+    }
+
+    if (!text) return true;
+
+    // 1. Try synthetic paste
     dispatchSyntheticPaste(el, text);
-    await sleep(120);
+    await sleep(200);
     if (editorSeemsToContain(el, text)) {
       log("Filled prompt via synthetic paste.");
       return true;
     }
 
+    // 2. Try beforeinput
+    log("Text not found, trying beforeinput...");
     const before = new InputEvent("beforeinput", {
-      bubbles: true,
-      cancelable: true,
-      composed: true,
-      inputType: "insertText",
-      data: text,
+      bubbles: true, cancelable: true, composed: true,
+      inputType: "insertText", data: text,
     });
     el.dispatchEvent(before);
-    el.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        composed: true,
-        inputType: "insertText",
-        data: text,
-      })
-    );
-    await sleep(80);
+    el.dispatchEvent(new InputEvent("input", {
+      bubbles: true, composed: true,
+      inputType: "insertText", data: text,
+    }));
+    await sleep(200);
     if (editorSeemsToContain(el, text)) {
       log("Filled prompt via insertText beforeinput.");
       return true;
     }
 
-    await clearEditorContent(el);
-    await focusEditorLikeUser(el);
-    log("Trying execCommand insertText per character (native beforeinput path)…");
+    // 3. Try execCommand insertText
+    log("Trying execCommand insertText per character...");
     for (let j = 0; j < text.length; j++) {
-      try {
-        document.execCommand("insertText", false, text[j]);
-      } catch {
-        /* continue with InputEvent path below */
-      }
+      try { document.execCommand("insertText", false, text[j]); } catch {}
       if (charDelayMs > 0) await sleep(charDelayMs);
     }
-    await sleep(80);
+    await sleep(200);
     if (editorSeemsToContain(el, text)) {
       log("Filled prompt via execCommand insertText.");
       return true;
     }
 
-    await clearEditorContent(el);
-    await focusEditorLikeUser(el);
-    log("Trying per-character InputEvent insertText (last resort)…");
+    // 4. Try InputEvents
+    log("Trying per-character InputEvent insertText...");
     await typeInsertTextEvents(el, text, charDelayMs);
-    await sleep(80);
+    await sleep(200);
     if (editorSeemsToContain(el, text)) {
       log("Filled prompt via synthetic InputEvents.");
       return true;
@@ -308,6 +450,13 @@
     const waitMaxMs = Math.max(waitMinMs, payload.waitMaxMs ?? 30_000);
     const preferEnter = payload.preferEnter === true;
     const charDelayMs = Math.max(0, payload.charDelayMs ?? 50);
+    const refImageBase64 = payload.refImage;
+    let refImageFile = null;
+    if (refImageBase64) {
+      refImageFile = base64ToFile(refImageBase64);
+      log(`Converted reference image (size: ${refImageFile.size} bytes)`);
+    }
+
     /** Only bundled defaults — never merge message-supplied selectors (reduces attack surface). */
     const selectors = globalThis.FLOW_BATCH_DEFAULT_SELECTORS;
 
@@ -332,7 +481,8 @@
         return { error: msg, completed: i, failedPromptIndex: i };
       }
 
-      const ok = await injectTextIntoFlowPrompt(input, text, charDelayMs);
+      const isFirstPrompt = i === 0;
+      const ok = await injectTextIntoFlowPrompt(input, text, charDelayMs, refImageFile, isFirstPrompt);
       if (!ok) {
         return {
           error:

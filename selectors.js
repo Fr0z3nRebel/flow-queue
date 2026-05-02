@@ -16,5 +16,12 @@ globalThis.FLOW_BATCH_DEFAULT_SELECTORS = {
     'button[type="submit"]',
   ],
 
+  uploadButton: [
+    'button[aria-label="Add image"]',
+    'button[aria-label*="Add image" i]',
+    'button[aria-label*="Upload" i]',
+    'button .google-symbols:contains("add")', // Note: querySelectorAll doesn't support :contains natively, we will fallback in js
+  ],
+
   dismissOverlays: ['button[aria-label="Close"]', 'button[aria-label="Dismiss"]'],
 };

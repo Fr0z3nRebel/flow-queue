@@ -12,6 +12,46 @@ const helpDialog = document.getElementById("helpDialog");
 const helpOpen = document.getElementById("helpOpen");
 const helpClose = document.getElementById("helpClose");
 
+const refImageEl = document.getElementById("refImage");
+const refImagePreviewContainer = document.getElementById("refImagePreviewContainer");
+const refImagePreview = document.getElementById("refImagePreview");
+const clearRefImageBtn = document.getElementById("clearRefImage");
+
+let currentRefImageBase64 = null;
+
+function updateRefImagePreview(dataUrl) {
+  if (dataUrl) {
+    currentRefImageBase64 = dataUrl;
+    refImagePreview.src = dataUrl;
+    refImagePreviewContainer.style.display = "block";
+  } else {
+    currentRefImageBase64 = null;
+    refImagePreview.src = "";
+    refImagePreviewContainer.style.display = "none";
+    if (refImageEl) refImageEl.value = "";
+  }
+}
+
+if (refImageEl) {
+  refImageEl.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      updateRefImagePreview(ev.target.result);
+      persist();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+if (clearRefImageBtn) {
+  clearRefImageBtn.addEventListener("click", () => {
+    updateRefImagePreview(null);
+    persist();
+  });
+}
+
 function setStatus(text) {
   statusEl.textContent = text;
 }
@@ -73,6 +113,7 @@ runBtn.addEventListener("click", async () => {
     waitMinMs,
     waitMaxMs,
     charDelayMs: CHAR_DELAY_MS,
+    refImage: currentRefImageBase64,
   });
   runBtn.disabled = false;
   if (!res) return;
@@ -88,12 +129,13 @@ stopBtn.addEventListener("click", async () => {
 });
 
 chrome.storage.local.get(
-  ["flowBatchPrompts", "flowBatchWaitMin", "flowBatchWaitMax", "flowBatchAfter"],
+  ["flowBatchPrompts", "flowBatchWaitMin", "flowBatchWaitMax", "flowBatchAfter", "flowBatchRefImage"],
   (r) => {
     if (r.flowBatchPrompts) promptsEl.value = r.flowBatchPrompts;
     if (r.flowBatchWaitMin != null) waitMinEl.value = String(r.flowBatchWaitMin);
     else if (r.flowBatchAfter != null) waitMinEl.value = String(r.flowBatchAfter);
     if (r.flowBatchWaitMax != null) waitMaxEl.value = String(r.flowBatchWaitMax);
+    if (r.flowBatchRefImage) updateRefImagePreview(r.flowBatchRefImage);
   }
 );
 
@@ -102,6 +144,7 @@ function persist() {
     flowBatchPrompts: promptsEl.value,
     flowBatchWaitMin: waitMinEl.value,
     flowBatchWaitMax: waitMaxEl.value,
+    flowBatchRefImage: currentRefImageBase64,
   });
 }
 promptsEl.addEventListener("change", persist);
