@@ -16,6 +16,7 @@ const refImageEl = document.getElementById("refImage");
 const refImagePreviewContainer = document.getElementById("refImagePreviewContainer");
 const refImagePreview = document.getElementById("refImagePreview");
 const clearRefImageBtn = document.getElementById("clearRefImage");
+const dropZone = document.getElementById("dropZone");
 
 let currentRefImageBase64 = null;
 
@@ -24,24 +25,51 @@ function updateRefImagePreview(dataUrl) {
     currentRefImageBase64 = dataUrl;
     refImagePreview.src = dataUrl;
     refImagePreviewContainer.style.display = "block";
+    if (dropZone) dropZone.style.display = "none";
   } else {
     currentRefImageBase64 = null;
     refImagePreview.src = "";
     refImagePreviewContainer.style.display = "none";
+    if (dropZone) dropZone.style.display = "block";
     if (refImageEl) refImageEl.value = "";
   }
 }
 
+function handleFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    updateRefImagePreview(ev.target.result);
+    persist();
+  };
+  reader.readAsDataURL(file);
+}
+
 if (refImageEl) {
   refImageEl.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      updateRefImagePreview(ev.target.result);
-      persist();
-    };
-    reader.readAsDataURL(file);
+    handleFile(e.target.files[0]);
+  });
+}
+
+if (dropZone) {
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((name) => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+
+  ["dragenter", "dragover"].forEach((name) => {
+    dropZone.addEventListener(name, () => dropZone.classList.add("dragover"));
+  });
+
+  ["dragleave", "drop"].forEach((name) => {
+    dropZone.addEventListener(name, () => dropZone.classList.remove("dragover"));
+  });
+
+  dropZone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files[0];
+    handleFile(file);
   });
 }
 
