@@ -5,6 +5,10 @@
     console.log(LOG_PREFIX, ...args);
   }
 
+  function warn(...args) {
+    console.warn(LOG_PREFIX, ...args);
+  }
+
   function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
   }
@@ -415,6 +419,126 @@
     )[0];
   }
 
+  /**
+   * Find the Create button by its visually-hidden <span> label.
+   * Google Flow wraps "Create" in a clip-rect hidden span inside the button.
+   */
+  function findCreateButtonByHiddenLabel() {
+    for (const btn of document.querySelectorAll("button")) {
+      if (!isVisible(btn)) continue;
+      const spans = btn.querySelectorAll("span");
+      for (const span of spans) {
+        if (span.textContent?.trim().toLowerCase() === "create") {
+          return btn;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Consolidated submit button discovery with diagnostic logging.
+   */
+  function findSubmitButton(selectors) {
+    let btn = firstMatch(selectors.submitButton || []);
+    if (btn && isVisible(btn)) {
+      log("Submit button found via CSS selector.");
+      return btn;
+    }
+
+    btn = findCreateButtonByArrowIcon();
+    if (btn) {
+      log("Submit button found via arrow_forward icon.");
+      return btn;
+    }
+
+    btn = findCreateButtonByHiddenLabel();
+    if (btn) {
+      log("Submit button found via hidden 'Create' label.");
+      return btn;
+    }
+
+    for (const b of document.querySelectorAll("button")) {
+      if (!isVisible(b)) continue;
+      if (b.textContent?.toLowerCase().includes("create")) {
+        log("Submit button found via textContent scan.");
+        return b;
+      }
+    }
+
+    warn("Submit button NOT found by any strategy.");
+    return null;
+  }
+
+  /* ── MAIN world React fiber click ──────────────────────────────────
+   * Marks the target element, then asks the background service worker
+   * to inject a function via chrome.scripting.executeScript in the
+   * MAIN world. This bypasses both CSP and isTrusted checks — the
+   * injected code calls React's onClick handler directly.
+   * ---------------------------------------------------------------- */
+
+  const FQ_MARKER_ATTR = "data-fq-click-target";
+  let fqClickCounter = 0;
+
+  async function clickViaReactFiber(el) {
+    const token = String(++fqClickCounter);
+    el.setAttribute(FQ_MARKER_ATTR, token);
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: "REACT_FIBER_CLICK",
+        token,
+        markerAttr: FQ_MARKER_ATTR,
+      });
+      return result || { ok: false, reason: "no response from background" };
+    } catch (e) {
+      return { ok: false, reason: String(e?.message || e) };
+    } finally {
+      el.removeAttribute(FQ_MARKER_ATTR);
+    }
+  }
+
+  /**
+   * Click a button with full pointer/mouse event sequence (synthetic fallback).
+   */
+  function clickButtonSynthetic(btn) {
+    const r = btn.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const common = {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+      clientX: cx,
+      clientY: cy,
+      button: 0,
+      buttons: 1,
+    };
+    btn.dispatchEvent(new PointerEvent("pointerdown", { ...common, pointerId: 1, pointerType: "mouse" }));
+    btn.dispatchEvent(new MouseEvent("mousedown", common));
+    btn.dispatchEvent(new PointerEvent("pointerup", { ...common, pointerId: 1, pointerType: "mouse" }));
+    btn.dispatchEvent(new MouseEvent("mouseup", common));
+    btn.dispatchEvent(new MouseEvent("click", { ...common, buttons: 0 }));
+    btn.click();
+  }
+
+  /**
+   * Try all click strategies: React fiber onSubmit → onClick → synthetic events
+   */
+  async function clickSubmitButton(btn) {
+    // Attempt 1: React fiber direct call (bypasses isTrusted entirely)
+    const fiberResult = await clickViaReactFiber(btn);
+    if (fiberResult.ok) {
+      log(`Submit via React fiber: ${fiberResult.method} at depth ${fiberResult.depth}`);
+      return true;
+    }
+    warn("React fiber submit failed:", JSON.stringify(fiberResult));
+
+    // Attempt 2: Full synthetic pointer/mouse event sequence
+    warn("Trying synthetic click events (may not work with isTrusted checks)...");
+    clickButtonSynthetic(btn);
+    return true;
+  }
+
   function submitViaEnter(el) {
     for (const type of ["keydown", "keypress", "keyup"]) {
       el.dispatchEvent(
@@ -496,12 +620,17 @@
 
       let submitted = false;
       if (!preferEnter) {
-        let submit =
-          firstMatch(selectors.submitButton || []) || findCreateButtonByArrowIcon();
-        if (submit && isVisible(submit)) {
-          submit.click();
-          submitted = true;
-          log(`Clicked Create (prompt ${i + 1}/${prompts.length})`);
+        const submit = findSubmitButton(selectors);
+        if (submit) {
+          try {
+            await clickSubmitButton(submit);
+            submitted = true;
+            log(`Submitted prompt ${i + 1}/${prompts.length}.`);
+          } catch (e) {
+            warn(`Click failed for prompt ${i + 1}:`, e?.message || e);
+          }
+        } else {
+          warn(`No submit button found for prompt ${i + 1}, will try Enter.`);
         }
       }
       if (!submitted) {

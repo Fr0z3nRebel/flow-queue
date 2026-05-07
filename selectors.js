@@ -14,6 +14,7 @@ globalThis.FLOW_BATCH_DEFAULT_SELECTORS = {
     'button[aria-label="Create"]',
     'button[aria-label*="Create" i]',
     'button[type="submit"]',
+    // Fallback: icon + hidden-label + textContent discovery handled in content.js findSubmitButton()
   ],
 
   uploadButton: [
